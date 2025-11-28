@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Results - Leaderboard</title>
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+    integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+    crossorigin="anonymous"
+  />
+  <style>
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top, #1c1a63 0%, #12103d 45%, #050617 100%);
+      background-size: 220% 220%;
+      animation: aurora 18s ease-in-out infinite alternate;
+      min-height: 100vh;
+      color: #e2e8f0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    main {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 16px;
+    }
+    .result-card {
+      width: 100%;
+      max-width: 960px;
+      background: rgba(15, 23, 42, 0.96);
+      border-radius: 32px;
+      padding: 48px 50px;
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 45px 120px rgba(2,6,23,0.9);
+      text-align: center;
+    }
+    .podium-card {
+      border-radius: 20px;
+      padding: 20px;
+      background: rgba(30, 41, 59, 0.85);
+      border: 1px solid rgba(148,163,184,0.2);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 20px 45px rgba(0,0,0,0.45);
+    }
+    .podium-card.gold { border-color: rgba(250,204,21,0.6); color: #facc15; }
+    .podium-card.silver { border-color: rgba(229,231,235,0.5); color: #f3f4f6; }
+    .podium-card.bronze { border-color: rgba(249,115,22,0.5); color: #fb923c; }
+    .table thead th {
+      border-bottom: none;
+      text-transform: uppercase;
+      font-size: 0.85rem;
+      letter-spacing: 0.6px;
+      color: #cbd5f5;
+      background: rgba(15, 23, 42, 0.7);
+    }
+    .table tbody td {
+      border-color: rgba(148,163,184,0.2) !important;
+      background: rgba(15,23,42,0.4);
+    }
+    .gold { color: #facc15; font-weight: 700; }
+    .silver { color: #e5e7eb; font-weight: 600; }
+    .bronze { color: #fb923c; font-weight: 600; }
+    .btn-gradient {
+      background-image: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      border: none;
+      color: #fff;
+      font-weight: 600;
+      box-shadow: 0 20px 40px rgba(37, 99, 235, 0.35);
+    }
+    .btn-ghost {
+      border: 1px solid rgba(255,255,255,0.3);
+      color: #fff;
+    }
+    .fade-up {
+      opacity: 0;
+      transform: translateY(35px);
+      animation: fadeUp 0.9s ease forwards;
+    }
+    .fade-up.delay-1 { animation-delay: 0.2s; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(35px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes aurora {
+      0% { background-position: 0% 0%; }
+      50% { background-position: 100% 60%; }
+      100% { background-position: 0% 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="result-card fade-up">
+      <p class="text-uppercase text-warning fw-semibold small mb-2">Final standings</p>
+      <h1 class="display-6 fw-bold text-white mb-1">Leaderboard</h1>
+      <p class="text-white-50 mb-4" id="info">Loading...</p>
+      <div class="row g-3 justify-content-center mb-4" id="podium"></div>
+
+      <div class="table-responsive rounded-4 border border-opacity-25 border-light mb-4">
+        <table class="table table-dark table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Player</th>
+              <th>Correct (12)</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <!-- Filled by JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <div class="d-flex flex-wrap justify-content-center gap-3">
+        <button class="btn btn-gradient px-4" onclick="location.href='player-home.html'">Play Again</button>
+        <button class="btn btn-ghost px-4" onclick="location.href='index.html'">Back to Menu</button>
+      </div>
+    </div>
+  </main>
+  <script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+    integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+    crossorigin="anonymous"
+  ></script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+
+  <script>
+
+    const infoEl = document.getElementById("info");
+    const tableBody = document.getElementById("table-body");
+    const podiumEl = document.getElementById("podium");
+
+    function renderPodium(players) {
+      if (!players.length) {
+        podiumEl.innerHTML = "<div class='col-12'><p class='text-white-50 mb-0'>No podium yet.</p></div>";
+        return;
+      }
+      podiumEl.innerHTML = "";
+      const labels = ["1st", "2nd", "3rd"];
+      players.forEach((player, idx) => {
+        const role = idx === 0 ? "gold" : idx === 1 ? "silver" : "bronze";
+        const col = document.createElement("div");
+        col.className = "col-12 col-md-4";
+        const div = document.createElement("div");
+        div.className = `podium-card ${role}`;
+        const correct = Number.isFinite(player.correctCount) ? player.correctCount : 0;
+        div.innerHTML = `
+          <p class="display-6 fw-bold mb-1">${labels[idx]}</p>
+          <p class="h5 mb-1">${player.name || "Unknown"}</p>
+          <p class="text-white-50 mb-0">${correct} / 12 correct</p>
+        `;
+        col.appendChild(div);
+        podiumEl.appendChild(col);
+      });
+    }
+
+    async function loadLeaderboard() {
+      infoEl.textContent = "Loading leaderboard...";
+      tableBody.innerHTML = "";
+      try {
+        const snap = await db.collection("players").get();
+        const players = [];
+        snap.forEach(doc => {
+          const data = doc.data();
+          players.push({
+            name: data.name || "Unknown",
+            rank: typeof data.rank === "number" ? data.rank : null,
+            correctCount: typeof data.correctCount === "number" ? data.correctCount : null,
+            timestamp: data.timestamp || "",
+            totalTime: typeof data.totalTime === "number" ? data.totalTime : (typeof data.time === "number" ? data.time : null)
+          });
+        });
+        if (players.length === 0) {
+          infoEl.textContent = "No players yet.";
+          tableBody.innerHTML = "<tr><td class='text-center text-white-50 py-4' colspan='3'>No data</td></tr>";
+          return;
+        }
+        players.sort((a, b) => {
+          const rankA = a.rank ?? 99;
+          const rankB = b.rank ?? 99;
+          if (rankA !== rankB) return rankA - rankB;
+          const tsA = new Date(a.timestamp || 0).getTime();
+          const tsB = new Date(b.timestamp || 0).getTime();
+          return tsA - tsB;
+        });
+        infoEl.textContent = "Total players: " + players.length;
+
+        renderPodium(players.slice(0, 3));
+
+        players.forEach((p, index) => {
+          const rank = p.rank ?? index + 1;
+          const tr = document.createElement("tr");
+          let cls = "";
+          if (rank === 1) cls = "gold";
+          else if (rank === 2) cls = "silver";
+          else if (rank === 3) cls = "bronze";
+
+          tr.innerHTML = `
+            <td class="${cls}">${rank}</td>
+            <td class="${cls}">${p.name || "Unknown"}</td>
+            <td class="${cls}">${Number.isFinite(p.correctCount) ? `${p.correctCount}/12` : "-"}</td>
+          `;
+          tableBody.appendChild(tr);
+        });
+      } catch (e) {
+        console.error(e);
+        infoEl.textContent = "Error loading data.";
+      }
+    }
+
+    // in case still fullscreen
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+
+    loadLeaderboard();
+  </script>
+</body>
+</html>

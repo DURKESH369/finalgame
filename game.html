@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Game - Find the Hidden Word</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      background: linear-gradient(135deg, #1e3a8a 0%, #312e81 15%, #4c1d95 30%, #7c3aed 45%, #1e40af 60%, #6366f1 75%, #8b5cf6 90%, #ec4899 100%);
+      background-size: 400% 400%;
+      animation: aurora 20s ease-in-out infinite;
+      color: #ffffff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      min-height: 100vh;
+    }
+    .container {
+      padding: 16px;
+      max-width: 100%;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    h1 { 
+      text-align: center; 
+      margin-top: 10px;
+      font-size: 32px;
+      color: #ffffff;
+      font-weight: 700;
+      text-shadow: 
+        0 2px 12px rgba(0,0,0,0.4),
+        0 0 20px rgba(96, 165, 250, 0.4),
+        0 0 30px rgba(139, 92, 246, 0.35),
+        0 0 40px rgba(236, 72, 153, 0.25),
+        0 0 50px rgba(34, 197, 94, 0.2);
+      animation: titleFadeIn 0.8s ease forwards, titleGlow 4s ease-in-out infinite;
+    }
+    .game-layout {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+      width: 100%;
+    }
+    .puzzle {
+      flex: 1 1 48%;
+      min-width: 400px;
+      max-width: 50%;
+      animation: floatY 4s ease-in-out infinite;
+      box-sizing: border-box;
+    }
+    .puzzle img {
+      display: block;
+      width: 100%;
+      min-height: 420px;
+      max-height: 520px;
+      object-fit: cover;
+      border-radius: 24px;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.55);
+      transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), filter 0.6s ease, box-shadow 0.6s ease;
+      animation: imageFadeIn 0.8s ease forwards;
+    }
+    .puzzle:hover img {
+      transform: scale(1.03);
+      box-shadow: 
+        0 30px 70px rgba(0,0,0,0.65), 
+        0 0 30px rgba(59, 130, 246, 0.2), 
+        0 0 50px rgba(139, 92, 246, 0.3),
+        0 0 70px rgba(236, 72, 153, 0.2),
+        0 0 90px rgba(34, 197, 94, 0.15);
+      filter: brightness(1.08);
+    }
+    /* Fullscreen styles - make image much bigger */
+    :fullscreen .puzzle,
+    body.fullscreen-active .puzzle {
+      flex: 1 1 70%;
+      max-width: 70%;
+      min-width: 600px;
+    }
+    :fullscreen .puzzle img,
+    body.fullscreen-active .puzzle img {
+      width: 100%;
+      max-height: 90vh;
+      object-fit: contain;
+    }
+    :fullscreen .panel,
+    body.fullscreen-active .panel {
+      flex: 1 1 28%;
+      max-width: 28%;
+    }
+    :fullscreen .game-layout,
+    body.fullscreen-active .game-layout {
+      max-width: 95%;
+      margin: 20px auto;
+    }
+    :fullscreen .container,
+    body.fullscreen-active .container {
+      padding: 20px;
+      max-width: 100%;
+    }
+    .panel {
+      background: linear-gradient(145deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.94) 25%, rgba(51, 65, 85, 0.92) 50%, rgba(30, 41, 59, 0.94) 75%, rgba(15, 23, 42, 0.96) 100%);
+      padding: 24px 28px;
+      border-radius: 20px;
+      width: 340px;
+      max-width: 100%;
+      box-sizing: border-box;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.85), 0 0 40px rgba(59, 130, 246, 0.15), 0 0 60px rgba(139, 92, 246, 0.2), 0 0 80px rgba(236, 72, 153, 0.1);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(148,163,184,0.3);
+      border-top-color: rgba(59, 130, 246, 0.4);
+      border-right-color: rgba(139, 92, 246, 0.4);
+      border-bottom-color: rgba(236, 72, 153, 0.3);
+      border-left-color: rgba(59, 130, 246, 0.4);
+      transform: translateY(20px);
+      opacity: 0;
+      animation: riseIn 0.8s ease forwards 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .panel::before,
+    .panel::after {
+      content: "";
+      position: absolute;
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      filter: blur(5px);
+      opacity: 0.85;
+      pointer-events: none;
+      animation: orbDrift 9s linear infinite;
+    }
+    .panel::before {
+      top: -50px;
+      right: -40px;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.35), rgba(236, 72, 153, 0.25), rgba(59,130,246,0.2), transparent 75%);
+    }
+    .panel::after {
+      bottom: -60px;
+      left: -30px;
+      animation-delay: -4s;
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.35), rgba(34, 197, 94, 0.25), rgba(139, 92, 246, 0.2), transparent 75%);
+    }
+    .level-label {
+      margin: 6px 0 10px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #fcd34d;
+      text-shadow: 
+        0 2px 8px rgba(252, 211, 77, 0.4),
+        0 0 15px rgba(236, 72, 153, 0.3),
+        0 0 20px rgba(139, 92, 246, 0.25);
+      animation: fadeInLabel 0.6s ease forwards, labelGlow 3s ease-in-out infinite;
+    }
+    .levels-indicator {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .level-chip {
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      border: 1px solid rgba(255,255,255,0.3);
+      color: #e5e7eb;
+      background: rgba(255,255,255,0.08);
+    }
+    .level-chip.completed {
+      background: linear-gradient(135deg, rgba(34,197,94,0.25), rgba(16,185,129,0.2));
+      border-color: rgba(34,197,94,0.7);
+      color: #bbf7d0;
+      box-shadow: 0 4px 12px rgba(34,197,94,0.3);
+    }
+    .level-chip.active {
+      background: linear-gradient(135deg, rgba(59,130,246,0.35), rgba(139,92,246,0.3), rgba(236,72,153,0.2));
+      border-color: rgba(59,130,246,0.9);
+      color: #bfdbfe;
+      box-shadow: 0 8px 20px rgba(59,130,246,0.26), 0 0 15px rgba(139, 92, 246, 0.3), 0 0 25px rgba(236, 72, 153, 0.2);
+      animation: chipPulse 2.8s ease-in-out infinite;
+    }
+    .level-chip.locked {
+      opacity: 0.45;
+    }
+    label { 
+      font-size: 14px; 
+      display: block; 
+      margin-top: 8px;
+      color: #cbd5e1;
+      font-weight: 500;
+      transition: color 0.3s ease;
+    }
+    label:hover {
+      color: #e2e8f0;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(148,163,184,0.25);
+      background: rgba(30, 41, 59, 0.7);
+      color: #ffffff;
+      margin-top: 4px;
+      font-size: 14px;
+      box-sizing: border-box;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+    input:nth-of-type(1) {
+      border-left: 3px solid rgba(59, 130, 246, 0.5);
+    }
+    input:nth-of-type(2) {
+      border-left: 3px solid rgba(139, 92, 246, 0.5);
+    }
+    input:nth-of-type(3) {
+      border-left: 3px solid rgba(236, 72, 153, 0.5);
+    }
+    input:nth-of-type(4) {
+      border-left: 3px solid rgba(34, 197, 94, 0.5);
+    }
+    input:hover {
+      background: rgba(30, 41, 59, 0.85);
+      box-shadow: 0 0 10px rgba(139, 92, 246, 0.15);
+    }
+    input:nth-of-type(1):hover {
+      border-left-color: rgba(59, 130, 246, 0.8);
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.2);
+    }
+    input:nth-of-type(2):hover {
+      border-left-color: rgba(139, 92, 246, 0.8);
+      box-shadow: 0 0 12px rgba(139, 92, 246, 0.2);
+    }
+    input:nth-of-type(3):hover {
+      border-left-color: rgba(236, 72, 153, 0.8);
+      box-shadow: 0 0 12px rgba(236, 72, 153, 0.2);
+    }
+    input:nth-of-type(4):hover {
+      border-left-color: rgba(34, 197, 94, 0.8);
+      box-shadow: 0 0 12px rgba(34, 197, 94, 0.2);
+    }
+    button {
+      padding: 10px 18px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      margin-top: 12px;
+      font-size: 15px;
+      transition: transform 0.3s ease, box-shadow 0.3s ease, filter 0.3s ease;
+    }
+    .btn-secondary {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+      color: #ffffff;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35), 0 0 15px rgba(139, 92, 246, 0.2);
+      padding: 8px 16px;
+      margin: 0;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .btn-secondary:hover {
+      transform: translateY(-2px);
+      box-shadow: 
+        0 6px 16px rgba(99, 102, 241, 0.5),
+        0 0 20px rgba(139, 92, 246, 0.3),
+        0 0 30px rgba(236, 72, 153, 0.25);
+      filter: brightness(1.1);
+    }
+    .btn-primary { 
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 20%, #8b5cf6 40%, #ec4899 60%, #6366f1 80%, #3b82f6 100%);
+      background-size: 200% 200%;
+      animation: gradientShift 4s ease infinite;
+      color: #ffffff; 
+      width: 100%; 
+      box-shadow: 0 8px 24px rgba(37, 99, 235, 0.45), 0 0 20px rgba(139, 92, 246, 0.25), 0 0 30px rgba(236, 72, 153, 0.15);
+      font-weight: 600;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .btn-primary::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, transparent, rgba(255,255,255,0.35), transparent);
+      transform: translateX(-120%) skewX(-20deg);
+      animation: buttonSheen 3.5s infinite;
+    }
+    .btn-primary:hover {
+      transform: translateY(-3px) scale(1.01);
+      box-shadow: 
+        0 12px 32px rgba(37, 99, 235, 0.55), 
+        0 4px 12px rgba(96, 165, 250, 0.3), 
+        0 0 25px rgba(139, 92, 246, 0.4),
+        0 0 35px rgba(236, 72, 153, 0.3),
+        0 0 45px rgba(34, 197, 94, 0.2);
+      filter: brightness(1.15);
+    }
+    .timer { 
+      margin-top: 8px; 
+      font-size: 14px; 
+      font-weight: bold;
+      color: #ffffff;
+      text-shadow: 
+        0 0 8px rgba(56,189,248,0.5),
+        0 0 12px rgba(139, 92, 246, 0.3),
+        0 0 16px rgba(236, 72, 153, 0.2);
+    }
+    .msg { 
+      margin-top: 8px; 
+      min-height: 18px; 
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .error { color: #fca5a5; }
+    .success { color: #86efac; }
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .small { 
+      font-size: 12px; 
+      color: #d1d5db; 
+    }
+    .timer span {
+      display: inline-block;
+      min-width: 60px;
+      text-align: right;
+      animation: glow 2s ease-in-out infinite;
+    } 
+    @keyframes aurora {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    input:focus {
+      outline: none;
+      background: rgba(30, 41, 59, 0.95);
+      transform: translateY(-1px);
+    }
+    input:nth-of-type(1):focus {
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.25), 0 4px 12px rgba(59, 130, 246, 0.2), 0 0 20px rgba(59, 130, 246, 0.3);
+    }
+    input:nth-of-type(2):focus {
+      border-color: #a78bfa;
+      box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.25), 0 4px 12px rgba(139, 92, 246, 0.2), 0 0 20px rgba(139, 92, 246, 0.3);
+    }
+    input:nth-of-type(3):focus {
+      border-color: #f472b6;
+      box-shadow: 0 0 0 3px rgba(244, 114, 182, 0.25), 0 4px 12px rgba(236, 72, 153, 0.2), 0 0 20px rgba(236, 72, 153, 0.3);
+    }
+    input:nth-of-type(4):focus {
+      border-color: #4ade80;
+      box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.25), 0 4px 12px rgba(34, 197, 94, 0.2), 0 0 20px rgba(34, 197, 94, 0.3);
+    }
+    @keyframes floatY {
+      0% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+      100% { transform: translateY(0); }
+    }
+    @keyframes riseIn {
+      0% { opacity: 0; transform: translateY(30px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes glow {
+      0%, 100% { 
+        text-shadow: 
+          0 0 6px rgba(56,189,248,0.5), 
+          0 0 10px rgba(139, 92, 246, 0.3),
+          0 0 14px rgba(236, 72, 153, 0.2); 
+        color: #f8fafc; 
+      }
+      50% { 
+        text-shadow: 
+          0 0 14px rgba(56,189,248,0.9), 
+          0 0 20px rgba(139, 92, 246, 0.5),
+          0 0 25px rgba(236, 72, 153, 0.4),
+          0 0 30px rgba(34, 197, 94, 0.3); 
+        color: #bae6fd; 
+      }
+    }
+    @keyframes orbDrift {
+      0% { transform: translate3d(0,0,0) scale(0.95); opacity: 0.35; }
+      50% { transform: translate3d(18px,-14px,0) scale(1.1); opacity: 0.75; }
+      100% { transform: translate3d(0,0,0) scale(0.95); opacity: 0.35; }
+    }
+    @keyframes chipPulse {
+      0%,100% { 
+        box-shadow: 
+          0 8px 20px rgba(59,130,246,0.25), 
+          0 0 12px rgba(139, 92, 246, 0.2),
+          0 0 18px rgba(236, 72, 153, 0.15); 
+        transform: translateY(0); 
+      }
+      50% { 
+        box-shadow: 
+          0 12px 26px rgba(59,130,246,0.45), 
+          0 0 18px rgba(139, 92, 246, 0.35),
+          0 0 25px rgba(236, 72, 153, 0.3),
+          0 0 30px rgba(34, 197, 94, 0.2); 
+        transform: translateY(-2px); 
+      }
+    }
+    @keyframes buttonSheen {
+      0% { transform: translateX(-120%) skewX(-20deg); }
+      60% { transform: translateX(120%) skewX(-20deg); }
+      100% { transform: translateX(120%) skewX(-20deg); }
+    }
+    @keyframes fadeInLabel {
+      from { opacity: 0; transform: translateY(-5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes imageFadeIn {
+      from { opacity: 0; transform: scale(0.98); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes titleFadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes gradientShift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    @keyframes titleGlow {
+      0%, 100% {
+        text-shadow: 
+          0 2px 12px rgba(0,0,0,0.4),
+          0 0 20px rgba(96, 165, 250, 0.4),
+          0 0 30px rgba(139, 92, 246, 0.35),
+          0 0 40px rgba(236, 72, 153, 0.25);
+      }
+      50% {
+        text-shadow: 
+          0 2px 12px rgba(0,0,0,0.4),
+          0 0 25px rgba(96, 165, 250, 0.5),
+          0 0 40px rgba(139, 92, 246, 0.45),
+          0 0 50px rgba(236, 72, 153, 0.35),
+          0 0 60px rgba(34, 197, 94, 0.3);
+      }
+    }
+    @keyframes labelGlow {
+      0%, 100% {
+        text-shadow: 
+          0 2px 8px rgba(252, 211, 77, 0.4),
+          0 0 15px rgba(236, 72, 153, 0.3),
+          0 0 20px rgba(139, 92, 246, 0.25);
+      }
+      50% {
+        text-shadow: 
+          0 2px 8px rgba(252, 211, 77, 0.5),
+          0 0 20px rgba(236, 72, 153, 0.4),
+          0 0 25px rgba(139, 92, 246, 0.35),
+          0 0 30px rgba(59, 130, 246, 0.3);
+      }
+    }
+
+    /* ========== RESPONSIVE DESIGN ========== */
+    
+    /* Large Desktop (1920px and above) */
+    @media (min-width: 1920px) {
+      .container {
+        max-width: 1800px;
+        margin: 0 auto;
+      }
+      .game-layout {
+        gap: 40px;
+      }
+      .panel {
+        width: 380px;
+        padding: 32px 36px;
+      }
+    }
+
+    /* Desktop (1200px to 1919px) */
+    @media (min-width: 1200px) and (max-width: 1919px) {
+      .game-layout {
+        gap: 30px;
+      }
+    }
+
+    /* Tablet Landscape (992px to 1199px) */
+    @media (min-width: 992px) and (max-width: 1199px) {
+      .puzzle {
+        flex: 1 1 45%;
+        min-width: 350px;
+        max-width: 48%;
+      }
+      .panel {
+        width: 320px;
+        padding: 22px 24px;
+      }
+      h1 {
+        font-size: 28px;
+      }
+    }
+
+    /* Tablet Portrait (768px to 991px) */
+    @media (min-width: 768px) and (max-width: 991px) {
+      .container {
+        padding: 12px;
+      }
+      .game-layout {
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
+      }
+      .puzzle {
+        flex: 1 1 100%;
+        min-width: 100%;
+        max-width: 100%;
+        width: 100%;
+      }
+      .puzzle img {
+        min-height: 350px;
+        max-height: 450px;
+      }
+      .panel {
+        width: 100%;
+        max-width: 500px;
+        padding: 24px 28px;
+      }
+      h1 {
+        font-size: 26px;
+      }
+    }
+
+    /* Mobile Landscape (576px to 767px) */
+    @media (min-width: 576px) and (max-width: 767px) {
+      .container {
+        padding: 10px;
+      }
+      .game-layout {
+        flex-direction: column;
+        gap: 20px;
+        margin-top: 15px;
+      }
+      .puzzle {
+        flex: 1 1 100%;
+        min-width: 100%;
+        max-width: 100%;
+        width: 100%;
+      }
+      .puzzle img {
+        min-height: 280px;
+        max-height: 380px;
+        border-radius: 16px;
+      }
+      .panel {
+        width: 100%;
+        max-width: 100%;
+        padding: 20px 24px;
+        border-radius: 16px;
+      }
+      h1 {
+        font-size: 24px;
+        margin-top: 5px;
+      }
+      .level-label {
+        font-size: 15px;
+      }
+      label {
+        font-size: 13px;
+      }
+      input {
+        padding: 12px;
+        font-size: 16px; /* Prevents zoom on iOS */
+      }
+      button {
+        padding: 14px 18px;
+        font-size: 16px;
+      }
+      .btn-secondary {
+        padding: 8px 14px;
+        font-size: 14px;
+      }
+      .top-bar {
+        gap: 6px;
+      }
+    }
+
+    /* Mobile Portrait (up to 575px) */
+    @media (max-width: 575px) {
+      .container {
+        padding: 8px;
+      }
+      .game-layout {
+        flex-direction: column;
+        gap: 16px;
+        margin-top: 12px;
+      }
+      .puzzle {
+        flex: 1 1 100%;
+        min-width: 100%;
+        max-width: 100%;
+        width: 100%;
+      }
+      .puzzle img {
+        min-height: 240px;
+        max-height: 320px;
+        border-radius: 12px;
+      }
+      .panel {
+        width: 100%;
+        max-width: 100%;
+        padding: 18px 20px;
+        border-radius: 16px;
+      }
+      .panel::before,
+      .panel::after {
+        width: 80px;
+        height: 80px;
+      }
+      h1 {
+        font-size: 20px;
+        margin-top: 5px;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.4), 0 0 15px rgba(96, 165, 250, 0.2);
+      }
+      .level-label {
+        font-size: 14px;
+        margin: 4px 0 8px;
+      }
+      .levels-indicator {
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .level-chip {
+        padding: 4px 10px;
+        font-size: 12px;
+      }
+      label {
+        font-size: 13px;
+        margin-top: 6px;
+      }
+      input {
+        padding: 12px;
+        font-size: 16px; /* Prevents zoom on iOS */
+        border-radius: 6px;
+        margin-top: 4px;
+      }
+      button {
+        padding: 14px 16px;
+        font-size: 16px;
+        margin-top: 10px;
+      }
+      .btn-secondary {
+        padding: 8px 12px;
+        font-size: 13px;
+      }
+      .top-bar {
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .timer {
+        font-size: 13px;
+      }
+      .timer span {
+        min-width: 50px;
+      }
+      .msg {
+        font-size: 13px;
+        min-height: 16px;
+      }
+      #start-overlay h2 {
+        font-size: 22px;
+        margin-bottom: 8px;
+      }
+      #start-overlay p {
+        font-size: 13px;
+        padding: 0 16px;
+      }
+    }
+
+    /* Extra Small Mobile (up to 375px) */
+    @media (max-width: 375px) {
+      .container {
+        padding: 6px;
+      }
+      h1 {
+        font-size: 18px;
+      }
+      .puzzle img {
+        min-height: 200px;
+        max-height: 280px;
+      }
+      .panel {
+        padding: 16px 18px;
+      }
+      input {
+        padding: 10px;
+      }
+      button {
+        padding: 12px 14px;
+      }
+    }
+
+    /* Fullscreen Responsive Adjustments */
+    @media (max-width: 991px) {
+      :fullscreen .puzzle,
+      body.fullscreen-active .puzzle {
+        flex: 1 1 100%;
+        max-width: 100%;
+        min-width: 100%;
+      }
+      :fullscreen .panel,
+      body.fullscreen-active .panel {
+        flex: 1 1 100%;
+        max-width: 100%;
+      }
+      :fullscreen .game-layout,
+      body.fullscreen-active .game-layout {
+        flex-direction: column;
+      }
+    }
+
+    /* Touch Device Optimizations */
+    @media (hover: none) and (pointer: coarse) {
+      .puzzle:hover img {
+        transform: scale(1);
+      }
+      input:hover {
+        border-color: rgba(148,163,184,0.25);
+        box-shadow: none;
+      }
+      .btn-primary:hover {
+        transform: translateY(0) scale(1);
+      }
+      button:hover {
+        transform: translateY(0);
+      }
+      label:hover {
+        color: #cbd5e1;
+      }
+    }
+
+    /* Landscape Orientation Adjustments */
+    @media (max-width: 991px) and (orientation: landscape) {
+      .puzzle img {
+        min-height: 200px;
+        max-height: 300px;
+      }
+      .panel {
+        padding: 16px 20px;
+      }
+      h1 {
+        font-size: 22px;
+        margin-top: 3px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="top-bar">
+      <h1>Find the Hidden Word</h1>
+      <button class="btn-secondary" onclick="quitGame()">Quit</button>
+    </div>
+    <p class="small"></p>
+
+    <div class="game-layout">
+      <div class="puzzle">
+        <!-- Replace with your real puzzle image -->
+        <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSqIzBL5VzekQmzg_96JhXXnra8CbntI83jG1PcA349_mB5l5iuNUw7uElJBw_gcrcCYZ8&usqp=CAU" alt="Puzzle" />
+      </div>
+
+      <div class="panel">
+        <p class="timer">Time: <span id="timer">0.00</span> seconds</p>
+        <p class="level-label">Level: <span id="level-name">Easy</span></p>
+        <div class="levels-indicator" id="level-progress"></div>
+
+        <label for="answer1">Answer 1</label>
+        <input id="answer1" type="text" placeholder="Enter first answer" />
+
+        <label for="answer2">Answer 2</label>
+        <input id="answer2" type="text" placeholder="Enter second answer" />
+
+        <label for="answer3">Answer 3</label>
+        <input id="answer3" type="text" placeholder="Enter third answer" />
+
+        <label for="answer4">Answer 4</label>
+        <input id="answer4" type="text" placeholder="Enter fourth answer" />
+
+        <button class="btn-primary" id="submit-btn" disabled>Submit Answers</button>
+
+        <div class="msg" id="msg"></div>
+      </div>
+    </div>
+
+    <!-- Fullscreen / start overlay -->
+    <div id="start-overlay" style="
+      position: fixed;
+      inset: 0;
+      background: rgba(15,23,42,0.96);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      z-index: 50;
+    ">
+      <h2 style="margin: 0 0 10px; font-size: 26px;">Click to Start Game</h2>
+      <p style="margin: 0; font-size: 14px; color: #e5e7eb; max-width: 420px; text-align: center;">
+        Click anywhere on this screen. The game will go fullscreen and the timer will start automatically.
+      </p>
+    </div>
+  </div>
+
+  <!-- Firebase SDK (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+
+  <script>
+
+    // Level definitions (replace placeholder words with real ones)
+    const LEVELS = [
+      { 
+        name: "Easy", 
+        words: ["APPLE", "ORANGE", "GRAPES", "MANGO", "BANANA"],
+        image: "WhatsApp Image 2025-11-27 at 3.16.19 PM (1).jpeg"
+      },
+      { 
+        name: "Medium", 
+        words: ["1","2","3","4","5","6","7","8","9","10"],
+        image: "WhatsApp Image 2025-11-27 at 3.32.00 PM (1).jpeg"
+      },
+      { 
+        name: "Hard", 
+        words: ["D","U","R","K","E","S","H"],
+        image: "WhatsApp Image 2025-11-27 at 3.16.19 PM (1).jpeg"
+      }
+    ];
+
+    let startTime = null;
+    let timerInterval = null;
+    let gameRunning = false;
+    // Controls whether leaving fullscreen is allowed (quit / navigation)
+    let allowFullscreenExit = false;
+    let currentLevelIndex = 0;
+    let score = 0;
+    let wrongCount = 0;
+
+    const timerEl = document.getElementById("timer");
+    const msgEl = document.getElementById("msg");
+    const levelNameEl = document.getElementById("level-name");
+    const levelProgressEl = document.getElementById("level-progress");
+    const puzzleImageEl = document.querySelector(".puzzle img");
+    const answer1Input = document.getElementById("answer1");
+    const answer2Input = document.getElementById("answer2");
+    const answer3Input = document.getElementById("answer3");
+    const answer4Input = document.getElementById("answer4");
+    const submitBtn = document.getElementById("submit-btn");
+    const startOverlay = document.getElementById("start-overlay");
+
+    // Read player details stored from rules page
+    const storedPlayerName = localStorage.getItem("playerName");
+    const storedEmail = localStorage.getItem("playerEmail");
+    const storedCollege = localStorage.getItem("playerCollege");
+
+    function startTimer() {
+      startTime = performance.now();
+      gameRunning = true;
+      timerInterval = setInterval(() => {
+        const elapsed = (performance.now() - startTime) / 1000;
+        timerEl.textContent = elapsed.toFixed(2);
+      }, 50);
+    }
+
+    function stopTimer() {
+      if (!timerInterval) return 0;
+      clearInterval(timerInterval);
+      timerInterval = null;
+      const elapsed = (performance.now() - startTime) / 1000;
+      gameRunning = false;
+      return parseFloat(elapsed.toFixed(2));
+    }
+
+    async function saveResult(time, finalScore, finalWrongCount) {
+      const now = new Date().toISOString();
+      await db.collection("players").add({
+        name: storedPlayerName || "Unknown",
+        email: storedEmail || null,
+        college: storedCollege || null,
+        time,
+        score: finalScore,
+        wrongCount: finalWrongCount,
+        timestamp: now
+      });
+    }
+
+    function updateLevelUI() {
+      const level = LEVELS[currentLevelIndex];
+      levelNameEl.textContent = level.name;
+      if (puzzleImageEl) {
+        puzzleImageEl.src = level.image;
+        puzzleImageEl.alt = `${level.name} puzzle`;
+      }
+      levelProgressEl.innerHTML = LEVELS.map((lvl, idx) => {
+        const status = idx < currentLevelIndex ? "completed" : idx === currentLevelIndex ? "active" : "locked";
+        return `<span class="level-chip ${status}">${lvl.name}</span>`;
+      }).join("");
+    }
+
+    function clearAnswers() {
+      answer1Input.value = "";
+      answer2Input.value = "";
+      answer3Input.value = "";
+      answer4Input.value = "";
+    }
+
+    function requestFullscreen() {
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen().then(() => {
+          document.body.classList.add('fullscreen-active');
+        }).catch(() => {});
+      }
+    }
+
+    function exitFullscreen() {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().then(() => {
+          document.body.classList.remove('fullscreen-active');
+        }).catch(() => {});
+      }
+    }
+
+    // Listen for fullscreen changes
+    document.addEventListener('fullscreenchange', () => {
+      if (document.fullscreenElement) {
+        document.body.classList.add('fullscreen-active');
+      } else {
+        document.body.classList.remove('fullscreen-active');
+
+        // If fullscreen was exited unexpectedly while the game is running,
+        // and we did NOT explicitly allow it, treat as breaking the rules.
+        if (gameRunning && !allowFullscreenExit) {
+          disqualifyPlayer();
+        }
+      }
+    });
+
+    // If the tab loses visibility/focus while the game is running,
+    // treat it as breaking the rules (Alt+Tab, switching tabs, etc.)
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && gameRunning) {
+        disqualifyPlayer();
+      }
+    });
+
+    window.addEventListener("blur", () => {
+      if (gameRunning) {
+        disqualifyPlayer();
+      }
+    });
+
+    // On load, ensure we have player details; show overlay to start fullscreen+timer
+    window.addEventListener("load", () => {
+      if (!storedPlayerName || !storedEmail || !storedCollege) {
+        alert("Player details missing. Please start again from the rules page.");
+        location.href = "player-rules.html";
+        return;
+      }
+      updateLevelUI();
+
+      // Wait for a user click on overlay to enter fullscreen and start the game
+      if (startOverlay) {
+        const startHandler = () => {
+          // remove handler so it only runs once
+          startOverlay.removeEventListener("click", startHandler);
+
+          requestFullscreen();
+          if (startOverlay && startOverlay.parentNode) {
+            startOverlay.parentNode.removeChild(startOverlay);
+          }
+
+          msgEl.textContent = "Timer started. Solve the puzzle!";
+          msgEl.className = "msg";
+          submitBtn.disabled = false;
+          startTimer();
+        };
+
+        startOverlay.addEventListener("click", startHandler);
+      }
+    });
+
+    submitBtn.addEventListener("click", async () => {
+      const answers = [
+        answer1Input.value.trim().toUpperCase(),
+        answer2Input.value.trim().toUpperCase(),
+        answer3Input.value.trim().toUpperCase(),
+        answer4Input.value.trim().toUpperCase()
+      ];
+
+      if (answers.some(a => !a)) {
+        msgEl.textContent = "Please fill all 4 answers.";
+        msgEl.className = "msg error";
+        return;
+      }
+
+      if (!gameRunning) {
+        msgEl.textContent = "Timer is not running.";
+        msgEl.className = "msg error";
+        return;
+      }
+
+      const currentLevel = LEVELS[currentLevelIndex];
+      const allowedWords = (currentLevel.words || (currentLevel.word ? currentLevel.word.split(",") : []))
+        .map(w => w.trim().toUpperCase())
+        .filter(Boolean);
+
+      const matches = answers.filter(answer => {
+        const normalized = answer.trim().toUpperCase();
+        return allowedWords.includes(normalized);
+      }).length;
+      const misses = answers.length - matches;
+      score += matches;
+      wrongCount += misses;
+
+      const allowedLabel = allowedWords.join(", ") || "your target list";
+      msgEl.textContent = "";
+      msgEl.className = "msg";
+
+      const isLastLevel = currentLevelIndex === LEVELS.length - 1;
+
+      if (!isLastLevel) {
+        currentLevelIndex += 1;
+        clearAnswers();
+        updateLevelUI();
+        return;
+      }
+
+      const time = stopTimer();
+      msgEl.textContent = `All levels complete! Score: ${score}, Wrong: ${wrongCount}, Time: ${time.toFixed(2)}s. Saving result...`;
+      msgEl.className = "msg success";
+      submitBtn.disabled = true;
+
+      try {
+        await saveResult(time, score, wrongCount);
+        allowFullscreenExit = true;
+        setTimeout(() => {
+          location.href = "scoreboard.html";
+        }, 800);
+      } catch (e) {
+        console.error(e);
+        msgEl.textContent = "Error saving result. Try again.";
+        msgEl.className = "msg error";
+        submitBtn.disabled = false;
+      }
+    });
+
+    function quitGame() {
+      if (confirm("Quit game and open the scoreboard?")) {
+        stopTimer();
+        // This is an allowed exit
+        allowFullscreenExit = true;
+        exitFullscreen();
+        location.href = "scoreboard.html";
+      }
+    }
+
+    // Used when player breaks rules (e.g., presses ESC)
+    function disqualifyPlayer() {
+      // Prevent this from re-triggering via fullscreenchange
+      allowFullscreenExit = true;
+      stopTimer();
+      exitFullscreen();
+      location.href = "disqualified.html";
+    }
+
+    // Anti-inspect - block F12, ESC, and developer tools
+    document.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      return false;
+    });
+
+    document.addEventListener("keydown", (e) => {
+      // If player presses ESC, F5, or refresh shortcuts while the game is running,
+      // treat it as breaking the rules (disqualify).
+      if (gameRunning) {
+        // ESC
+        if (e.key === "Escape" || e.keyCode === 27) {
+          allowFullscreenExit = false;
+          return;
+        }
+        // F5
+        if (e.key === "F5" || e.keyCode === 116) {
+          e.preventDefault();
+          e.stopPropagation();
+          disqualifyPlayer();
+          return false;
+        }
+        // Ctrl+R / Cmd+R (refresh)
+        if ((e.ctrlKey || e.metaKey) && (e.key === "r" || e.key === "R")) {
+          e.preventDefault();
+          e.stopPropagation();
+          disqualifyPlayer();
+          return false;
+        }
+      }
+
+      // Always block F12 (console)
+      if (e.key === "F12" || e.keyCode === 123) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+      
+      // Block Ctrl+Shift+I / J / C / K (DevTools shortcuts)
+      if (e.ctrlKey && e.shiftKey && ["I","i","J","j","C","c","K","k"].includes(e.key)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+      
+      // Block Ctrl+U (View Source) and Ctrl+S (Save Page)
+      if (e.ctrlKey && ["U","u","S","s"].includes(e.key)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    });
+  </script>
+</body>
+</html>
